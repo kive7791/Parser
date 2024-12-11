@@ -1,55 +1,67 @@
-import unittest # using module for better readability and maintainability of test cases
-from Parser import parse, tokenize
+# Test Suite with Automated Validation
+import unittest
+from Parser import Parser
 
 # Using assertions to automatically check whether the output of the parser matches the expected results
-
-# Define test cases: (input, expected_output)
-test_cases = [
-    ("a", "'a'"),
-    ("a*", "star('a')"),
-    ("a|b", "union('a', 'b')"),
-    ("ab", "concat('a', 'b')"),
-    ("(a|b)*", "star(union('a', 'b'))"),
-    ("a|b*c", "union('a', concat(star('b'), 'c'))"),
-    ("", ValueError),  # Expect an error for empty input
-    ("a**", ValueError),  # Invalid double star
-    ("(a", ValueError),  # Missing closing parenthesis
-]
-
-# Run tests
-for regex, expected in test_cases:
-    try:
-        tokens = tokenize(regex)
-        ast = parse(tokens)
-        result = repr(ast)  # Use repr to get a string representation
-        assert result == expected, f"Test failed for '{regex}': {result} != {expected}"
-        print(f"Test passed for: '{regex}'")
-    except Exception as e:
-        if isinstance(expected, type) and isinstance(e, expected):
-            print(f"Test passed for: '{regex}' (raised {expected.__name__} as expected)")
-        else:
-            print(f"Test failed for '{regex}': {e}")
-
-# Start of Parser Test 
-
 class TestParser(unittest.TestCase):
+    def setUp(self):
+        self.parser = Parser("ab")
 
-    def test_simple_cases(self):
-        self.assertEqual(repr(parse(tokenize("a"))), "'a'")
-        self.assertEqual(repr(parse(tokenize("a*"))), "star('a')")
-        self.assertEqual(repr(parse(tokenize("a|b"))), "union('a', 'b')")
+    # Expect an error for empty input
+    def test_empty_input(self):
+        self.parser.regex = ""
+        with self.assertRaises(ValueError):
+            self.parser.tokenize()
 
-    def test_complex_cases(self):
-        self.assertEqual(repr(parse(tokenize("ab"))), "concat('a', 'b')")
-        self.assertEqual(repr(parse(tokenize("(a|b)*"))), "star(union('a', 'b'))")
+    # Missing closing parenthesis
+    def test_invalid_regex(self):
+        invalid_regex = "(a|b"
+        self.parser.regex = invalid_regex
+        with self.assertRaises(ValueError):
+            self.parser.parse()
 
-    def test_edge_cases(self):
+    # Invalid double star
+    def test_invalid_regex_star(self):
+        invalid_regex = "a**"
+        self.parser.regex = invalid_regex
         with self.assertRaises(ValueError):
-            parse(tokenize(""))
-        with self.assertRaises(ValueError):
-            parse(tokenize("a**"))
-        with self.assertRaises(ValueError):
-            parse(tokenize("(a"))
+            self.parser.parse()
+
+    def test_simple_regex_a(self):
+        self.parser.regex = "a"
+        sol:tuple = ('Literal', 'a')
+        ast = self.parser.parse()
+        self.assertEqual(ast, sol)
+
+    def test_simple_regex_a_star(self):
+        self.parser.regex = "a*"
+        sol:tuple = ('Star', ('Literal', 'a'))
+        ast = self.parser.parse()
+        self.assertEqual(ast, sol)
+
+    def test_simple_regex_a_u_b(self):
+        self.parser.regex = "a|b"
+        sol:tuple = ('Union', ('Literal', 'a'), ('Literal', 'b'))
+        ast = self.parser.parse()
+        self.assertEqual(ast, sol)
+
+    def test_simple_regex_a_n_b(self):
+        self.parser.regex = "ab"
+        sol:tuple = ('Concat', ('Literal', 'a'), ('Literal', 'b'))
+        ast = self.parser.parse()
+        self.assertEqual(ast, sol)
+
+    def test_simple_regex_a_u_b_star(self):
+        self.parser.regex = "(a|b)*"
+        sol:tuple = ('Star', ('Union', ('Literal', 'a'), ('Literal', 'b')))
+        ast = self.parser.parse()
+        self.assertEqual(ast, sol)
+
+    def test_simple_regex_a_u_b_star_c(self):
+        self.parser.regex = "a|b*c"
+        sol:tuple = ('Union', ('Literal', 'a'), ('Concat', ('Star', ('Literal', 'b')), ('Literal', 'c')))
+        ast = self.parser.parse()
+        self.assertEqual(ast, sol)
 
 if __name__ == "__main__":
     unittest.main()
