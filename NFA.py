@@ -6,120 +6,55 @@ class NFA:
         self.states = set()
         self.transitions = {}
         self.start_state = None # The initial state of the NFA
-        self.accept_state = None # The final(accepting) state of the NFA
+        self.accept_states = set() # The final(accepting) state of the NFA
 
-#Simple Character(a) NFA creation 
-def nfa_for_char(char):
-    nfa = NFA()
-    start = "q0"
-    end = "q1"
-    nfa.states = {start, end}
-    nfa.transitions = {start: {char: {end}}}
-    nfa.start_state = start
-    nfa.accept_state = end
-    return nfa
+    def add_state(self, state):
+        self.states.add(state)
 
-# rename states of an NFA to ensure uniquness when combinin NFAs
-# Example if nfa.states = {'q0', 'q1'} and offset = 2, renamed states become {'q2', 'q3'}.
-def rename_states(nfa, offset):
-    """Renames states of an NFA to ensure uniqueness."""
-    state_map = {state: f"q{idx + offset}" for idx, state in enumerate(nfa.states)}
-    renamed_nfa = NFA()
-    renamed_nfa.states = {state_map[state] for state in nfa.states}
-    renamed_nfa.start_state = state_map[nfa.start_state]
-    renamed_nfa.accept_state = state_map[nfa.accept_state]
-    renamed_nfa.transitions = {
-        state_map[src]: {key: {state_map[dest] for dest in dests} for key, dests in trans.items()}
-        for src, trans in nfa.transitions.items()
-    }
-    return renamed_nfa
+    def add_transition(self, from_state, to_state, symbol):
+        if from_state not in self.transitions:
+            self.transitions[from_state] = []
+        self.transitions[from_state].append((to_state, symbol))
 
+    def set_start_state(self, state):
+        self.start_state = state
+        self.add_state(state)
 
-# Concatenation (Intersection) (ab)
-# Had an issue before that when concat was being called again for "Update" it was having troubles differentiating between
-# The new q0 and the old one
-def nfa_for_concat(nfa1, nfa2):
-    print("\n", "Entered Concat:", nfa1, " ", nfa2, "\n")
-    # Rename states of the second NFA to ensure uniqueness
-    offset = len(nfa1.states)
-    nfa2 = rename_states(nfa2, offset)
+    def add_accept_state(self, state):
+        self.accept_states.add(state)
+        self.add_state(state)
 
-    print("NFA States:", nfa1.states)
-    print("NFA States:", nfa2.states)
+    def simulate(self, input_string):
+        if input_string == "":
+            return True if self.start_state in self.accept_states else False
 
-    # Preserve the original accept state of nfa1
-    original_accept_state = nfa1.accept_state
+        # Rest of simulation logic
+        def epsilon_closure(states):
+            stack = list(states)
+            closure = set(states)
 
-    # Link the original accept state of nfa1 to the start state of renamed nfa2
-    if original_accept_state not in nfa1.transitions:
-        nfa1.transitions[original_accept_state] = {}
-    
-    # Add an epsilon trans state
-    nfa1.transitions[original_accept_state].setdefault('ε', set()).add(nfa2.start_state)
+            while stack:
+                state = stack.pop()
+                for to_state, symbol in self.transitions.get(state, []):
+                    if symbol == "" and to_state not in closure:  # Epsilon transition
+                        closure.add(to_state)
+                        stack.append(to_state)
+            return closure
 
-    # # Update the states and transitions
-    # nfa1.states.update(nfa2.states)
-    # nfa1.transitions.update(nfa2.transitions)
+        def move(states, symbol):
+            next_states = set()
+            for state in states:
+                for to_state, trans_symbol in self.transitions.get(state, []):
+                    if trans_symbol == symbol:
+                        next_states.add(to_state)
+            return next_states
 
-    # Merge states and transitions
-    nfa1.states.update(nfa2.states)
-    for state, trans in nfa2.transitions.items():
-        if state in nfa1.transitions:
-            for symbol, destinations in trans.items():
-                nfa1.transitions[state].setdefault(symbol, set()).update(destinations)
-        else:
-            nfa1.transitions[state] = trans
+        current_states = epsilon_closure({self.start_state})
+        for char in input_string:
+            current_states = epsilon_closure(move(current_states, char))
 
-    # Update the accept state of nfa1 to nfa2's accept state
-    nfa1.accept_state = nfa2.accept_state
+        return bool(current_states & self.accept_states)
 
-    print("Transitions:", nfa1.transitions, "Update: ", nfa2.transitions)
-    return nfa1
-
-# Union (a|b)
-def nfa_for_union(nfa1, nfa2):
-    # Rename states of both NFAs to ensure uniqueness
-    offset1 = 0
-    offset2 = len(nfa1.states)
-    nfa1 = rename_states(nfa1, offset1)
-    nfa2 = rename_states(nfa2, offset2)
-
-    # print("\n", "Entered Union:", nfa1, " ", nfa2, "\n")
-    nfa = NFA()
-    start = "q_start"
-    end = "q_end"
-
-    nfa.states = {start, end} | nfa1.states | nfa2.states
-    # print("NFA States:", nfa.states)
-    nfa.transitions = {
-        start: {"ε": {nfa1.start_state, nfa2.start_state}},
-        nfa1.accept_state: {"ε": {end}},
-        nfa2.accept_state: {"ε": {end}},
-        **nfa1.transitions,
-        **nfa2.transitions
-    }
-    # print("Transitions from q_start:", nfa.transitions['q_start'])
-    nfa.start_state = start
-    nfa.accept_state = end
-    # print("Start: ", nfa.start_state, "End: ", nfa.accept_state)
-    return nfa
-
-# Kleen Star (a*)
-# had to add a missing transition to ensure that the Kleene star func allows repeated execution of the NFA.
-def nfa_for_star(nfa):
-    # print("\n", "Entered Star:", nfa, "\n")
-    nfa_with_star = NFA()
-    start = "q_star_start"
-    end = "q_star_end"
-
-    nfa_with_star.states = {start, end} | nfa.states
-    # print("NFA States:", nfa.states)
-    nfa_with_star.transitions = {
-        start: {"ε": {nfa.start_state, end}},  # Link new start to original start and new end
-        nfa.accept_state: {"ε": {nfa.start_state, end, start}},  # Loop back to new start
-        **nfa.transitions
-    }
-    # print("Transitions:", nfa_with_star.transitions)
-    nfa_with_star.start_state = start
-    nfa_with_star.accept_state = end
-    return nfa_with_star
+    def __repr__(self):
+        return (f"NFA(start_state={self.start_state}, accept_states={self.accept_states}, "
+                f"transitions={self.transitions})")
