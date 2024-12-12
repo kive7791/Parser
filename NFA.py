@@ -56,5 +56,5 @@ class NFA:
         return bool(current_states & self.accept_states)
 
     def __repr__(self):
-        return (f"NFA(start_state={self.start_state}, accept_states={self.accept_states}, "
+        return (f"NFA(states={self.states}, start_state={self.start_state}, accept_states={self.accept_states}, "
                 f"transitions={self.transitions})")
